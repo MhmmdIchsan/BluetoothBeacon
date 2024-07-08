@@ -1,13 +1,13 @@
 package com.example.bluetoothbeacon
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -30,16 +30,15 @@ class MainActivity : AppCompatActivity() {
                     // A Bluetooth device was found
                     val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                     device?.let {
-                        try {
-                            val deviceName = it.name
-                            // Use deviceName here
-                        } catch (e: SecurityException) {
-                            Log.e("TAG", "SecurityException: Permission denied", e)
-                        }
-                        val deviceHardwareAddress = it.address // MAC address
-                        val deviceType = deviceAdapter.classifyDevice(it)
-                        // You can now add the device to your adapter
                         deviceAdapter.addDevice(it, 0) // replace 0 with actual RSSI if available
+                    }
+                }
+                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                    // Discovery has ended
+                    Toast.makeText(context, "Discovery finished", Toast.LENGTH_SHORT).show()
+                    // Restart discovery
+                    bluetoothHandler.startScanning { device ->
+                        deviceAdapter.addDevice(device, 0) // replace 0 with actual RSSI if available
                     }
                 }
             }
@@ -54,7 +53,10 @@ class MainActivity : AppCompatActivity() {
         checkPermissions()
         initRecyclerView()
 
-        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
+        val filter = IntentFilter().apply {
+            addAction(BluetoothDevice.ACTION_FOUND)
+            addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+        }
         registerReceiver(receiver, filter)
     }
 
@@ -78,11 +80,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun initializeBluetoothAndStartScanning() {
         if (bluetoothHandler.initBluetooth()) {
-            bluetoothHandler.startScanning({ device, rssi ->
-                deviceAdapter.addDevice(device, rssi)
-            }, { device ->
-                deviceAdapter.removeDevice(device)
-            })
+            bluetoothHandler.startScanning { device ->
+                // This block of code will be executed when a Bluetooth device is found
+                // 'device' is the BluetoothDevice that was found
+                deviceAdapter.addDevice(device, 0) // replace 0 with actual RSSI if available
+            }
         } else {
             Toast.makeText(this, "Bluetooth is not enabled", Toast.LENGTH_SHORT).show()
         }
@@ -108,19 +110,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
-                initializeBluetoothAndStartScanning()
-            }
-        } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                initializeBluetoothAndStartScanning()
-            }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            initializeBluetoothAndStartScanning()
         }
     }
 

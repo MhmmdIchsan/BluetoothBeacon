@@ -32,12 +32,14 @@ class DeviceAdapter(private val context: Context) : RecyclerView.Adapter<DeviceA
 
     fun addDevice(device: BluetoothDevice, rssi: Int) {
         val hasBluetoothPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED
-        val deviceName = if (hasBluetoothPermission) device.name ?: "." else ".."
+        val deviceName = if (hasBluetoothPermission) device.name else null
         val deviceType = if (hasBluetoothPermission) classifyDevice(device) else "Unknown"
-        val newDevice = Device(deviceName, deviceType, device.address, rssi)
-        if (!devices.any { it.address == device.address } && rssi > -70) {
-            devices.add(newDevice)
-            notifyItemInserted(devices.size - 1)
+        if (!deviceName.isNullOrEmpty()) {
+            val newDevice = Device(deviceName, deviceType, device.address, rssi)
+            if (!devices.any { it.address == device.address } ) {
+                devices.add(newDevice)
+                notifyItemInserted(devices.size - 1)
+            }
         }
     }
 
