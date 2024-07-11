@@ -9,15 +9,16 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
+import android.widget.ImageView
 
 class DeviceAdapter(private val context: Context) : RecyclerView.Adapter<DeviceAdapter.DeviceViewHolder>() {
 
     private val devices = mutableListOf<Device>()
-
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): DeviceViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_device, parent, false)
@@ -46,12 +47,13 @@ class DeviceAdapter(private val context: Context) : RecyclerView.Adapter<DeviceA
         }
     }
 
-    fun updateDevice(device: BluetoothDevice, newRssi: Int) {
-        val index = devices.indexOfFirst { it.address == device.address }
-        if (index != -1) {
-            val updatedDevice = devices[index].copy(rssi = newRssi, lastUpdated = System.currentTimeMillis())
-            devices[index] = updatedDevice
-            notifyItemChanged(index)
+    fun updateDevice(device: BluetoothDevice, rssi: Int) {
+        val deviceIndex = devices.indexOfFirst { it.address == device.address }
+        if (deviceIndex != -1) {
+            devices[deviceIndex].rssi = rssi
+            devices[deviceIndex].lastUpdated = System.currentTimeMillis()
+
+            notifyItemChanged(deviceIndex)
         }
     }
 
@@ -117,12 +119,30 @@ class DeviceAdapter(private val context: Context) : RecyclerView.Adapter<DeviceA
         private val deviceAddress: TextView = itemView.findViewById(R.id.device_address)
         private val deviceType: TextView = itemView.findViewById(R.id.device_type)
         private val deviceRssi: TextView = itemView.findViewById(R.id.device_rssi)
+        private val signalStrengthBar: ImageView = itemView.findViewById(R.id.signal_strength) // Change this line
 
+        init {
+            itemView.setOnLongClickListener {
+                true
+            }
+        }
         fun bind(device: Device) {
             deviceName.text = device.name ?: "."
             deviceType.text = device.type
             deviceAddress.text = device.address
             deviceRssi.text = "${device.rssi} dBm"
+
+            // Convert RSSI to scale of 0-4
+            val signalStrength = when {
+                device.rssi >= -50 -> 4
+                device.rssi >= -60 -> 3
+                device.rssi >= -70 -> 2
+                device.rssi >= -80 -> 1
+                else -> 0
+            }
+
+            // Update the signal strength bar
+            signalStrengthBar.setImageLevel(signalStrength)
         }
     }
 }
