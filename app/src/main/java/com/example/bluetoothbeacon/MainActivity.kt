@@ -1,6 +1,8 @@
 package com.example.bluetoothbeacon
 
 import android.Manifest
+import android.view.Window
+import android.view.WindowManager
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
@@ -8,12 +10,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -101,6 +105,14 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        changeStatusBarColor(R.color.black)
+
+        val toolbar: Toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        toolbar.title = "Bluetooth Beacon"
+        toolbar.setTitleTextColor(ContextCompat.getColor(this, R.color.white))
+
+
         bluetoothHandler = BluetoothHandler(this)
         checkPermissions()
         initRecyclerView()
@@ -110,6 +122,14 @@ class MainActivity : AppCompatActivity() {
             addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
         }
         registerReceiver(receiver, filter)
+    }
+
+    private fun changeStatusBarColor(colorResource: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            val window: Window = window
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            window.statusBarColor = ContextCompat.getColor(this, colorResource)
+        }
     }
 
     private fun checkPermissions() {
