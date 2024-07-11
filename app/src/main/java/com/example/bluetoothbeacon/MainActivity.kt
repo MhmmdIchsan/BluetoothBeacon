@@ -9,6 +9,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -22,26 +24,76 @@ class MainActivity : AppCompatActivity() {
     private val PERMISSION_REQUEST_CODE = 1
     private lateinit var bluetoothHandler: BluetoothHandler
     private lateinit var deviceAdapter: DeviceAdapter
+
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action: String = intent.action ?: ""
-            when(action) {
+            when (action) {
                 BluetoothDevice.ACTION_FOUND -> {
-                    // A Bluetooth device was found
                     val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    val rssi: Int = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
                     device?.let {
-                        deviceAdapter.addDevice(it, 0) // replace 0 with actual RSSI if available
+                        if (deviceAdapter.deviceExists(device.address)) {
+                            // If the device already exists in the list, update its RSSI
+                            deviceAdapter.updateDevice(device, rssi)
+                        } else {
+                            // If the device does not exist in the list, add it
+                            deviceAdapter.addDevice(device, rssi)
+                        }
                     }
                 }
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                     // Discovery has ended
                     Toast.makeText(context, "Discovery finished", Toast.LENGTH_SHORT).show()
+
+                    // Remove undetected devices
+                    deviceAdapter.removeUndetectedDevices()
+
                     // Restart discovery
-                    bluetoothHandler.startScanning { device ->
-                        deviceAdapter.addDevice(device, 0) // replace 0 with actual RSSI if available
+                    bluetoothHandler.startScanning { device, rssi ->
+                        if (deviceAdapter.deviceExists(device.address)) {
+                            // If the device already exists in the list, update its RSSI
+                            deviceAdapter.updateDevice(device, rssi)
+                        } else {
+                            // If the device does not exist in the list, add it
+                            deviceAdapter.addDevice(device, rssi)
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private val updateHandler = Handler(Looper.getMainLooper())
+    private val updateRunnable = object : Runnable {
+        override fun run() {
+            removeLostDevices() // Call this method before starting a new scan
+            bluetoothHandler.startScanning { device, rssi ->
+                if (deviceAdapter.deviceExists(device.address)) {
+                    // If the device already exists in the list, update its RSSI
+                    deviceAdapter.updateDevice(device, rssi)
+                } else {
+                    // If the device does not exist in the list, add it
+                    deviceAdapter.addDevice(device, rssi)
+                }
+            }
+            // Schedule the next update after 1 second
+            updateHandler.postDelayed(this, 5000)
+        }
+    }
+
+    private fun removeLostDevices() {
+        val devicesToRemove = mutableListOf<Device>()
+        val outOfRangeThreshold = 5000 // Set the out of range threshold to 5 seconds. You can adjust this value as needed.
+
+        deviceAdapter.iterateDevices { device ->
+            val timeSinceLastUpdate = System.currentTimeMillis() - device.lastUpdated
+            if (timeSinceLastUpdate > outOfRangeThreshold) {
+                devicesToRemove.add(device)
+            }
+        }
+        devicesToRemove.forEach { device ->
+            deviceAdapter.removeDevice(device.address)
         }
     }
 
@@ -80,10 +132,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun initializeBluetoothAndStartScanning() {
         if (bluetoothHandler.initBluetooth()) {
-            bluetoothHandler.startScanning { device ->
-                // This block of code will be executed when a Bluetooth device is found
-                // 'device' is the BluetoothDevice that was found
-                deviceAdapter.addDevice(device, 0) // replace 0 with actual RSSI if available
+            bluetoothHandler.startScanning { device, rssi ->
+                if (deviceAdapter.deviceExists(device.address)) {
+                    // If the device already exists in the list, update its RSSI
+                    deviceAdapter.updateDevice(device, rssi)
+                } else {
+                    // If the device does not exist in the list, add it
+                    deviceAdapter.addDevice(device, rssi)
+                }
             }
         } else {
             Toast.makeText(this, "Bluetooth is not enabled", Toast.LENGTH_SHORT).show()
@@ -113,12 +169,13 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            initializeBluetoothAndStartScanning()
+            updateHandler.post(updateRunnable)
         }
     }
 
     override fun onPause() {
         super.onPause()
+        updateHandler.removeCallbacks(updateRunnable)
         bluetoothHandler.stopScanning()
     }
 
@@ -128,3 +185,4 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(receiver)
     }
 }
+

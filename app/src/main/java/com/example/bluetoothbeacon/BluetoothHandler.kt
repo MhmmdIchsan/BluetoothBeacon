@@ -1,45 +1,70 @@
 package com.example.bluetoothbeacon
 
+import kotlinx.coroutines.*
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.Context
-import android.util.Log
-import android.widget.Toast
-import android.os.Handler
-import android.os.Looper
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 
 class BluetoothHandler(private val context: Context) {
-
-    private lateinit var bluetoothAdapter: BluetoothAdapter
-    private val handler = Handler(Looper.getMainLooper())
+    private val bluetoothScope = CoroutineScope(Dispatchers.IO)
+    private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+    private var isScanning = false
 
     fun initBluetooth(): Boolean {
-        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        bluetoothAdapter = bluetoothManager.adapter
-        return bluetoothAdapter != null && bluetoothAdapter.isEnabled
+        if (bluetoothAdapter == null) {
+            // Device doesn't support Bluetooth
+            return false
+        }
+        if (!bluetoothAdapter.isEnabled) {
+            // Bluetooth is not enabled
+            return false
+        }
+        return true
     }
 
-    fun startScanning(onDeviceFound: (BluetoothDevice) -> Unit) {
-        if (::bluetoothAdapter.isInitialized) {
-            try {
-                bluetoothAdapter.startDiscovery()
-            } catch (e: SecurityException) {
-                Log.e("Bluetooth", "SecurityException: Permission denied", e)
-                Toast.makeText(context, "Permission denied for Bluetooth scanning", Toast.LENGTH_SHORT).show()
+    fun startScanning(onDeviceFoundWithRssi: (BluetoothDevice, Int) -> Unit) {
+        // Check for ACCESS_FINE_LOCATION permission
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // Permission is not granted
+            // Show a message to the user or request the permission here
+            return
+        }
+
+        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
+        context.registerReceiver(object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                val rssi: Int = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
+                device?.let {
+                    onDeviceFoundWithRssi(it, rssi)
+                }
             }
-        } else {
-            Log.e("Bluetooth", "BluetoothAdapter is not initialized")
+        }, filter)
+
+        // Start Bluetooth discovery in a coroutine
+        bluetoothScope.launch {
+            bluetoothAdapter?.startDiscovery()
         }
     }
 
     fun stopScanning() {
-        if (::bluetoothAdapter.isInitialized) {
-            try {
-                bluetoothAdapter.cancelDiscovery()
-            } catch (e: SecurityException) {
-                Log.e("Bluetooth", "SecurityException: Permission denied", e)
-            }
+        // Check for BLUETOOTH_ADMIN permission
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
+            // Permission is not granted
+            // Show a message to the user or request the permission here
+            return
         }
+
+        // Cancel the coroutine
+        bluetoothScope.cancel()
+
+        // Stop Bluetooth discovery
+        bluetoothAdapter?.cancelDiscovery()
     }
 }

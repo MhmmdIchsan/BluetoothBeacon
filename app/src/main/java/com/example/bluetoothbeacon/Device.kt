@@ -4,5 +4,6 @@ data class Device(
     val name: String?,
     val type: String,
     val address: String,
-    val rssi: Int
+    var rssi: Int,
+    var lastUpdated: Long = System.currentTimeMillis()
 )

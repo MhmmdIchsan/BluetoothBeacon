@@ -18,6 +18,7 @@ class DeviceAdapter(private val context: Context) : RecyclerView.Adapter<DeviceA
 
     private val devices = mutableListOf<Device>()
 
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): DeviceViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_device, parent, false)
         return DeviceViewHolder(view, parent.context)
@@ -30,16 +31,27 @@ class DeviceAdapter(private val context: Context) : RecyclerView.Adapter<DeviceA
 
     override fun getItemCount() = devices.size
 
+    fun deviceExists(address: String): Boolean {
+        return devices.any { it.address == address }
+    }
+
     fun addDevice(device: BluetoothDevice, rssi: Int) {
         val hasBluetoothPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED
         val deviceName = if (hasBluetoothPermission) device.name else null
         val deviceType = if (hasBluetoothPermission) classifyDevice(device) else "Unknown"
         if (!deviceName.isNullOrEmpty()) {
-            val newDevice = Device(deviceName, deviceType, device.address, rssi)
-            if (!devices.any { it.address == device.address } ) {
-                devices.add(newDevice)
-                notifyItemInserted(devices.size - 1)
-            }
+            val newDevice = Device(deviceName, deviceType, device.address, rssi, System.currentTimeMillis())
+            devices.add(newDevice)
+            notifyItemInserted(devices.size - 1)
+        }
+    }
+
+    fun updateDevice(device: BluetoothDevice, newRssi: Int) {
+        val index = devices.indexOfFirst { it.address == device.address }
+        if (index != -1) {
+            val updatedDevice = devices[index].copy(rssi = newRssi, lastUpdated = System.currentTimeMillis())
+            devices[index] = updatedDevice
+            notifyItemChanged(index)
         }
     }
 
@@ -67,15 +79,36 @@ class DeviceAdapter(private val context: Context) : RecyclerView.Adapter<DeviceA
         }
     }
 
-    fun removeDevice(device: BluetoothDevice) {
-        val iterator = devices.iterator()
-        while (iterator.hasNext()) {
-            val dev = iterator.next()
-            if (dev.address == device.address) {
-                iterator.remove()
-                notifyDataSetChanged()
-                break
+    fun removeDevice(address: String) {
+        val index = devices.indexOfFirst { it.address == address }
+        if (index != -1) {
+            devices.removeAt(index)
+            notifyItemRemoved(index)
+        }
+        Log.d("DeviceAdapter", "Removed device: $address")
+    }
+
+    fun removeUndetectedDevices() {
+        val devicesToRemove = mutableListOf<Device>()
+        val rssiThreshold = -80 // Set the RSSI threshold. You can adjust this value as needed.
+
+        devices.forEach { device ->
+            if (device.rssi < rssiThreshold) {
+                devicesToRemove.add(device)
             }
+        }
+        devicesToRemove.forEach { device ->
+            devices.remove(device)
+            notifyItemRemoved(devices.indexOf(device))
+        }
+        Log.d("DeviceAdapter", "Removed undetected devices: ${devicesToRemove.map { it.name }}")
+    }
+
+
+
+    fun iterateDevices(action: (Device) -> Unit) {
+        for (device in devices) {
+            action(device)
         }
     }
 
